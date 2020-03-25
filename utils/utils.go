@@ -14,7 +14,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-// CheckExistsError check etcd data exist
+// CheckExistsError ignore etcd data exist error and return nil
+// otherwise keep it and return
 func CheckExistsError(err error) error {
 	if etcdError, ok := err.(client.Error); ok {
 		if etcdError.Code == client.ErrorCodeNodeExist {
