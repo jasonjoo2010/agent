@@ -2,6 +2,7 @@ package types
 
 import (
 	"os"
+	"strings"
 
 	coretypes "github.com/projecteru2/core/types"
 	log "github.com/sirupsen/logrus"
@@ -46,65 +47,76 @@ type Config struct {
 	Log     LogConfig
 }
 
+func setString(attr *string, c *cli.Context, key string) {
+	val := c.String(key)
+	if val != "" {
+		*attr = val
+	}
+}
+
+func setStringSlice(attr *[]string, c *cli.Context, key string) {
+	val := c.StringSlice(key)
+	if len(val) > 0 {
+		*attr = val
+	}
+}
+
+func setBool(attr *bool, c *cli.Context, key string) {
+	val := c.String(key)
+	if val != "" {
+		*attr = strings.EqualFold(val, "yes") || strings.EqualFold(val, "true")
+	}
+}
+
+func setInt(attr *int, c *cli.Context, key string) {
+	val := c.Int(key)
+	if val > 0 {
+		*attr = val
+	}
+}
+
+func setInt64(attr *int64, c *cli.Context, key string) {
+	val := c.Int64(key)
+	if val > 0 {
+		*attr = val
+	}
+}
+
 //PrepareConfig 从cli覆写并做准备
 func (config *Config) PrepareConfig(c *cli.Context) {
-	if c.String("hostname") != "" {
-		config.HostName = c.String("hostname")
-	} else {
+	setString(&config.HostName, c, "hostname")
+	setString(&config.Core, c, "core-endpoint")
+	setString(&config.Auth.Username, c, "core-username")
+	setString(&config.Auth.Password, c, "core-password")
+	setString(&config.PidFile, c, "pidfile")
+	setInt(&config.HealthCheckInterval, c, "health-check-interval")
+	setInt(&config.HealthCheckTimeout, c, "health-check-timeout")
+	setString(&config.Docker.Endpoint, c, "docker-endpoint")
+	setInt64(&config.Metrics.Step, c, "metrics-step")
+	setStringSlice(&config.Metrics.Transfers, c, "metrics-transfers")
+	setString(&config.API.Addr, c, "api-addr")
+	setStringSlice(&config.Log.Forwards, c, "log-forwards")
+	setBool(&config.Log.Stdout, c, "log-stdout")
+
+	//validate
+	if config.HostName == "" {
 		hostname, err := os.Hostname()
 		if err != nil {
 			log.Fatal(err)
+		} else {
+			config.HostName = hostname
 		}
-		config.HostName = hostname
 	}
-
-	if c.String("core-endpoint") != "" {
-		config.Core = c.String("core-endpoint")
-	}
-	if c.String("core-username") != "" {
-		config.Auth.Username = c.String("core-username")
-	}
-	if c.String("core-password") != "" {
-		config.Auth.Password = c.String("core-password")
-	}
-	if c.String("pidfile") != "" {
-		config.PidFile = c.String("pidfile")
-	}
-	if c.Int("health-check-interval") > 0 {
-		config.HealthCheckInterval = c.Int("health-check-interval")
-	}
-	if c.Int("health-check-timeout") > 0 {
-		config.HealthCheckTimeout = c.Int("health-check-timeout")
-	}
-	if c.String("docker-endpoint") != "" {
-		config.Docker.Endpoint = c.String("docker-endpoint")
-	}
-	if c.Int64("metrics-step") > 0 {
-		config.Metrics.Step = c.Int64("metrics-step")
-	}
-	if len(c.StringSlice("metrics-transfers")) > 0 {
-		config.Metrics.Transfers = c.StringSlice("metrics-transfers")
-	}
-	if c.String("api-addr") != "" {
-		config.API.Addr = c.String("api-addr")
-	}
-	if len(c.StringSlice("log-forwards")) > 0 {
-		config.Log.Forwards = c.StringSlice("log-forwards")
-	}
-	if c.String("log-stdout") != "" {
-		config.Log.Stdout = c.String("log-stdout") == "yes"
-	}
-	//validate
 	if config.PidFile == "" {
 		log.Fatal("need to set pidfile")
 	}
-	if config.HealthCheckTimeout == 0 {
+	if config.HealthCheckTimeout < 1 {
 		config.HealthCheckTimeout = 3
 	}
-	if config.HealthCheckInterval == 0 {
+	if config.HealthCheckInterval < 10 {
 		config.HealthCheckInterval = 10
 	}
-	if config.HealthCheckCacheTTL == 0 {
+	if config.HealthCheckCacheTTL < config.HealthCheckInterval*3/2 {
 		config.HealthCheckCacheTTL = 60
 	}
 }
