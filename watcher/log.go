@@ -31,7 +31,7 @@ func create() *Watcher {
 	w.consumer = map[string]map[string]*types.LogConsumer{}
 	w.LogC = make(chan *types.Log)
 	w.ConsumerC = make(chan *types.LogConsumer)
-	go w.Serve()
+	go w.serve()
 	return w
 }
 
@@ -93,7 +93,7 @@ func (w *Watcher) registerConsumer(consumer *types.LogConsumer) {
 }
 
 // Serve start monitor
-func (w *Watcher) Serve() {
+func (w *Watcher) serve() {
 	logrus.Info("[logServe] Log monitor started")
 	const timeout = 300 * time.Millisecond
 	timer := time.NewTimer(timeout)

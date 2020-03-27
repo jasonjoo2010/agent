@@ -62,7 +62,7 @@ func (h *Handler) log(w http.ResponseWriter, req *http.Request) {
 			ID:  coreutils.RandomString(8),
 			App: app, Conn: conn, Buf: buf,
 		}
-		watcher.LogMonitor.ConsumerC <- logConsumer
+		watcher.GetInstance().ConsumerC <- logConsumer
 		log.Infof("[apiLog] %s %s log attached", app, logConsumer.ID)
 	}
 }
