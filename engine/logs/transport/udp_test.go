@@ -62,7 +62,6 @@ func TestUDPNormal(t *testing.T) {
 			assert.NotNil(t, line)
 			assert.NotEmpty(t, line)
 			assert.Contains(t, string(line), fmt.Sprint("test", i/round))
-			println(string(line))
 		}
 
 		// large logs
