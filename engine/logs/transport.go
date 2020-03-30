@@ -5,6 +5,7 @@ import (
 )
 
 // Transporter defines general transporting abstraction and it can be pooled(Multiple instances).
+// According to this it's designed as NONE THREAD-SAFE.
 type Transporter interface {
 	// Send send out data in array and return true when success false for failure
 	Send(string []*types.Log) bool
