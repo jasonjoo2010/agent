@@ -19,12 +19,13 @@ require (
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.8.5 // indirect
 	github.com/jinzhu/configor v1.1.1
+	github.com/panjf2000/ants/v2 v2.3.1
 	github.com/projecteru2/core v0.0.0-20200313031343-262c693ab0bc
 	github.com/prometheus/client_golang v0.9.3
 	github.com/shirou/gopsutil v2.20.2+incompatible
 	github.com/sirupsen/logrus v1.4.2
 	github.com/soheilhy/cmux v0.1.4 // indirect
-	github.com/stretchr/testify v1.3.0
+	github.com/stretchr/testify v1.4.0
 	github.com/tmc/grpc-websocket-proxy v0.0.0-20190109142713-0ad062ec5ee5 // indirect
 	github.com/urfave/cli/v2 v2.0.0-alpha.2
 	github.com/xiang90/probing v0.0.0-20190116061207-43a291ad63a2 // indirect
