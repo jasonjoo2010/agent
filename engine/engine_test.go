@@ -21,6 +21,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/ioutils"
 	"github.com/docker/docker/pkg/stringid"
+	"github.com/projecteru2/agent/engine/logs"
 	"github.com/projecteru2/agent/store/mocks"
 	agenttypes "github.com/projecteru2/agent/types"
 	agentutils "github.com/projecteru2/agent/utils"
@@ -278,7 +279,9 @@ func mockNewEngine() *Engine {
 	engine.docker = docker
 	engine.cpuCore = float64(runtime.NumCPU())
 	engine.transfers = agentutils.NewHashBackends([]string{"127.0.0.1:8125"})
-	engine.forwards = agentutils.NewHashBackends([]string{"udp://127.0.0.1:5144"})
+
+	backends, _ := agentutils.ParseBackends([]string{"udp://127.0.0.1:5144"})
+	engine.writer, _ = logs.NewWriter(backends, 3, 1000, -1)
 
 	return engine
 }

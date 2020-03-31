@@ -1,4 +1,5 @@
 .vscode
+.history/
 agent2
 agent
 local.yaml

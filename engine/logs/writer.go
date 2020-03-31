@@ -2,164 +2,139 @@ package logs
 
 import (
 	"errors"
-	"fmt"
-	"net"
-	"net/url"
-	"sync"
-	"time"
+	"sync/atomic"
 
 	"github.com/projecteru2/agent/types"
-	log "github.com/sirupsen/logrus"
+	"github.com/projecteru2/agent/utils"
+	"github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
-// Discard .
-const Discard = "__discard__"
-
-// ErrConnecting means writer is in connecting status, waiting to be connected
-var ErrConnecting = errors.New("Connecting")
+var (
+	BufferFull    = errors.New("Sending queue of logs is full, discard")
+	AlreadyClosed = errors.New("Writer has been closed")
+	FlowLimiting  = errors.New("Flow limiting")
+)
 
 // Writer is a writer!
 type Writer struct {
-	sync.Mutex
-	addr       string
-	scheme     string
-	connecting bool
-	stdout     bool
-	enc        Encoder
+	pool    *Pool
+	buf     chan *types.Log
+	limiter *rate.Limiter
+	dropped uint64
+	closed  bool
 }
 
-type discard struct {
-}
-
-// Write writer
-func (d discard) Write(p []byte) (n int, err error) {
-	return 0, nil
-}
-
-// Close closer
-func (d discard) Close() error {
-	return nil
-}
-
-// NewWriter return writer
-func NewWriter(addr string, stdout bool) (*Writer, error) {
-	if addr == Discard {
-		return &Writer{
-			enc: NewStreamEncoder(discard{}),
-		}, nil
+// NewWriter create a writer based on specified backends
+//	concurrency specify the parellel workers' count
+//	bufferSize specify the queue capacity which are waiting to be processed
+//	ratelimit limit how many logs can be sent out per second, -1 for no limit
+func NewWriter(backends []*utils.Backend, concurrency, bufferSize, ratelimit int) (*Writer, error) {
+	var (
+		p   *Pool
+		err error
+	)
+	if len(backends) < 1 {
+		p, err = NewPool([]*utils.Backend{
+			utils.NewBackend(utils.BlackHole, "", 0),
+		}, 1)
+	} else {
+		p, err = NewPool(backends, concurrency)
 	}
-	u, err := url.Parse(addr)
 	if err != nil {
 		return nil, err
 	}
-	writer := &Writer{addr: u.Host, scheme: u.Scheme, stdout: stdout}
-	// pre-connect and ignore error
-	writer.checkConn()
-	return writer, err
-}
-
-// CreateConn create conn
-func (w *Writer) createEncoder() (enc Encoder, err error) {
-	switch w.scheme {
-	case "udp":
-		enc, err = w.createUDPEncoder()
-	case "tcp":
-		enc, err = w.createTCPEncoder()
-	case "journal":
-		enc, err = CreateJournalEncoder()
-	default:
-		err = fmt.Errorf("[writer] Invalid scheme: %s", w.scheme)
+	w := &Writer{
+		pool: p,
+		buf:  make(chan *types.Log, bufferSize),
 	}
-	return enc, err
+	if ratelimit > 0 {
+		w.limiter = rate.NewLimiter(rate.Limit(ratelimit), ratelimit/10)
+	}
+	go w.drainer()
+	return w, nil
 }
 
-func (w *Writer) checkError(err error) {
-	if err != nil && err != ErrConnecting {
-		w.Lock()
-		defer w.Unlock()
-		log.Errorf("[writer] Sending log failed %s", err)
-		if w.enc != nil {
-			w.enc.Close()
-			w.enc = nil
+// drainer is the worker
+func (w *Writer) drainer() {
+	for !w.closed {
+		arr := GetLogsBuffer()
+	FETCH_LOOP:
+		for i := 0; i < cap(arr); i++ {
+			select {
+			case log := <-w.buf:
+				arr = append(arr, log)
+			default:
+				break FETCH_LOOP
+			}
+		}
+		if len(arr) == 0 {
+			// empty
+			//time.Sleep(time.Millisecond * 50)
+			continue
+		}
+		if !w.pool.Send(arr) {
+			// failed, do nothing currently in writer
 		}
 	}
+	logrus.Info("Drainer of writer stopped")
 }
 
-func (w *Writer) checkConn() error {
-	w.Lock()
-	defer w.Unlock()
-	if w.enc != nil {
-		// normal
-		return nil
-	}
-	if w.connecting == false {
-		// double check
-		if w.connecting == true {
-			return ErrConnecting
-		}
-		w.connecting = true
-		go func() {
-			log.Debugf("[writer] Begin trying to connect to %s", w.addr)
-			// retrying up to 4 times to prevent infinite loop
-			for i := 0; i < 4; i++ {
-				enc, err := w.createEncoder()
-				if err == nil {
-					w.Lock()
-					w.enc = enc
-					w.connecting = false
-					w.Unlock()
-					break
-				} else {
-					log.Warnf("[writer] Failed to connect to %s: %s", w.addr, err)
-					time.Sleep(30 * time.Second)
-				}
-			}
-			if w.enc == nil {
-				log.Warnf("[writer] Connect to %s failed for 4 times", w.addr)
-				w.Lock()
-				w.connecting = false
-				w.Unlock()
-			} else {
-				log.Debugf("[writer] Connect to %s successfully", w.addr)
-			}
-		}()
-	}
-	return ErrConnecting
+// Droped return the count of dropped logs
+func (w *Writer) Dropped() uint64 {
+	return w.dropped
+}
+
+// ResetDroped reset the droped statistics and return the old value
+func (w *Writer) ResetDropped() uint64 {
+	val := atomic.SwapUint64(&w.dropped, 0)
+	return val
+}
+
+func (w *Writer) increaseDropped() uint64 {
+	val := atomic.AddUint64(&w.dropped, 1)
+	return val
+}
+
+func (w *Writer) Failed() uint64 {
+	return w.pool.Failed()
+}
+
+func (w *Writer) ResetFailed() uint64 {
+	return w.pool.ResetFailed()
+}
+
+func (w *Writer) Sent() uint64 {
+	return w.pool.Sent()
+}
+
+func (w *Writer) ResetSent() uint64 {
+	return w.pool.ResetSent()
+}
+
+func (w *Writer) Close() {
+	w.closed = true
+	w.pool.Close()
+	close(w.buf)
 }
 
 // Write write log to remote
 func (w *Writer) Write(logline *types.Log) error {
-	if w.stdout {
-		log.Info(logline)
+	if w.closed {
+		w.increaseDropped()
+		return AlreadyClosed
 	}
-	err := w.checkConn()
-	if err == nil {
-		err = w.enc.Encode(logline)
+	if w.limiter != nil && !w.limiter.Allow() {
+		// limited
+		w.increaseDropped()
+		return FlowLimiting
 	}
-	w.checkError(err)
-	return err
-}
-
-func (w *Writer) createUDPEncoder() (Encoder, error) {
-	udpAddr, err := net.ResolveUDPAddr("udp", w.addr)
-	if err != nil {
-		return nil, err
+	select {
+	case w.buf <- logline:
+		// succ
+		return nil
+	default:
+		w.increaseDropped()
+		return BufferFull
 	}
-	conn, err := net.DialUDP("udp", nil, udpAddr)
-	if err != nil {
-		return nil, err
-	}
-	return NewStreamEncoder(conn), nil
-}
-
-func (w *Writer) createTCPEncoder() (Encoder, error) {
-	tcpAddr, err := net.ResolveTCPAddr("tcp", w.addr)
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
-	if err != nil {
-		return nil, err
-	}
-	return NewStreamEncoder(conn), nil
 }

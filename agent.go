@@ -47,8 +47,8 @@ func serve(c *cli.Context) error {
 	utils.WritePid(config.PidFile)
 	defer os.Remove(config.PidFile)
 
-	watcher.InitMonitor()
-	go watcher.LogMonitor.Serve()
+	// init watcher but it is still not a good design exposing the chans directly
+	watcher.GetInstance()
 
 	agent, err := engine.NewEngine(config)
 	if err != nil {
@@ -63,104 +63,126 @@ func serve(c *cli.Context) error {
 	return nil
 }
 
+func getFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    "config",
+			Value:   "/etc/eru/agent.yaml",
+			Usage:   "config file path for agent, in yaml",
+			EnvVars: []string{"ERU_AGENT_CONFIG_PATH"},
+		},
+		&cli.StringFlag{
+			Name:    "log-level",
+			Value:   "INFO",
+			Usage:   "set log level",
+			EnvVars: []string{"ERU_AGENT_LOG_LEVEL"},
+		},
+		&cli.StringFlag{
+			Name:    "core-endpoint",
+			Value:   "",
+			Usage:   "core endpoint",
+			EnvVars: []string{"ERU_AGENT_CORE_ENDPOINT"},
+		},
+		&cli.StringFlag{
+			Name:    "core-username",
+			Value:   "",
+			Usage:   "core username",
+			EnvVars: []string{"ERU_AGENT_CORE_USERNAME"},
+		},
+		&cli.StringFlag{
+			Name:    "core-password",
+			Value:   "",
+			Usage:   "core password",
+			EnvVars: []string{"ERU_AGENT_CORE_PASSWORD"},
+		},
+		&cli.StringFlag{
+			Name:    "docker-endpoint",
+			Value:   "",
+			Usage:   "docker endpoint",
+			EnvVars: []string{"ERU_AGENT_DOCKER_ENDPOINT"},
+		},
+		&cli.Int64Flag{
+			Name:    "metrics-step",
+			Value:   0,
+			Usage:   "interval for metrics to send",
+			EnvVars: []string{"ERU_AGENT_METRICS_STEP"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "metrics-transfers",
+			Value:   &cli.StringSlice{},
+			Usage:   "metrics destinations",
+			EnvVars: []string{"ERU_AGENT_METRICS_TRANSFERS"},
+		},
+		&cli.StringFlag{
+			Name:    "api-addr",
+			Value:   "",
+			Usage:   "agent API serving address",
+			EnvVars: []string{"ERU_AGENT_API_ADDR"},
+		},
+		&cli.StringSliceFlag{
+			Name:    "log-forwards",
+			Value:   &cli.StringSlice{},
+			Usage:   "log destinations",
+			EnvVars: []string{"ERU_AGENT_LOG_FORWARDS"},
+		},
+		&cli.StringFlag{ // deprecated
+			Name:    "log-stdout",
+			Value:   "",
+			Usage:   "forward stdout out? yes/no",
+			EnvVars: []string{"ERU_AGENT_LOG_STDOUT"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-connections",
+			Value:   0,
+			Usage:   "how many connections will be made to transfer logs parallelly",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_CONNECTIONS"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-buffer-size",
+			Value:   0,
+			Usage:   "how many logs can be buffered before transferred",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_BUFFER_SIZE"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-ratelimit",
+			Value:   0,
+			Usage:   "whether it should be limited at a rate",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_RATELIMIT"},
+		},
+		&cli.StringFlag{
+			Name:    "pidfile",
+			Value:   "",
+			Usage:   "pidfile to save",
+			EnvVars: []string{"ERU_AGENT_PIDFILE"},
+		},
+		&cli.IntFlag{
+			Name:    "health-check-interval",
+			Value:   0,
+			Usage:   "interval for agent to check container's health status",
+			EnvVars: []string{"ERU_AGENT_HEALTH_CHECK_INTERVAL"},
+		},
+		&cli.IntFlag{
+			Name:    "health-check-timeout",
+			Value:   0,
+			Usage:   "timeout for agent to check container's health status",
+			EnvVars: []string{"ERU_AGENT_HEALTH_CHECK_TIMEOUT"},
+		},
+		&cli.StringFlag{
+			Name:    "hostname",
+			Value:   "",
+			Usage:   "change hostname",
+			EnvVars: []string{"ERU_HOSTNAME"},
+		},
+	}
+}
+
 func main() {
 	app := &cli.App{
 		Name:    "Eru-Agent",
 		Usage:   "Run eru agent",
 		Version: common.EruAgentVersion,
-		Flags: []cli.Flag{
-			&cli.StringFlag{
-				Name:    "config",
-				Value:   "/etc/eru/agent.yaml",
-				Usage:   "config file path for agent, in yaml",
-				EnvVars: []string{"ERU_AGENT_CONFIG_PATH"},
-			},
-			&cli.StringFlag{
-				Name:    "log-level",
-				Value:   "INFO",
-				Usage:   "set log level",
-				EnvVars: []string{"ERU_AGENT_LOG_LEVEL"},
-			},
-			&cli.StringFlag{
-				Name:    "core-endpoint",
-				Value:   "",
-				Usage:   "core endpoint",
-				EnvVars: []string{"ERU_AGENT_CORE_ENDPOINT"},
-			},
-			&cli.StringFlag{
-				Name:    "core-username",
-				Value:   "",
-				Usage:   "core username",
-				EnvVars: []string{"ERU_AGENT_CORE_USERNAME"},
-			},
-			&cli.StringFlag{
-				Name:    "core-password",
-				Value:   "",
-				Usage:   "core password",
-				EnvVars: []string{"ERU_AGENT_CORE_PASSWORD"},
-			},
-			&cli.StringFlag{
-				Name:    "docker-endpoint",
-				Value:   "",
-				Usage:   "docker endpoint",
-				EnvVars: []string{"ERU_AGENT_DOCKER_ENDPOINT"},
-			},
-			&cli.Int64Flag{
-				Name:    "metrics-step",
-				Value:   0,
-				Usage:   "interval for metrics to send",
-				EnvVars: []string{"ERU_AGENT_METRICS_STEP"},
-			},
-			&cli.StringSliceFlag{
-				Name:    "metrics-transfers",
-				Value:   &cli.StringSlice{},
-				Usage:   "metrics destinations",
-				EnvVars: []string{"ERU_AGENT_METRICS_TRANSFERS"},
-			},
-			&cli.StringFlag{
-				Name:    "api-addr",
-				Value:   "",
-				Usage:   "agent API serving address",
-				EnvVars: []string{"ERU_AGENT_API_ADDR"},
-			},
-			&cli.StringSliceFlag{
-				Name:    "log-forwards",
-				Value:   &cli.StringSlice{},
-				Usage:   "log destinations",
-				EnvVars: []string{"ERU_AGENT_LOG_FORWARDS"},
-			},
-			&cli.StringFlag{
-				Name:    "log-stdout",
-				Value:   "",
-				Usage:   "forward stdout out? yes/no",
-				EnvVars: []string{"ERU_AGENT_LOG_STDOUT"},
-			},
-			&cli.StringFlag{
-				Name:    "pidfile",
-				Value:   "",
-				Usage:   "pidfile to save",
-				EnvVars: []string{"ERU_AGENT_PIDFILE"},
-			},
-			&cli.IntFlag{
-				Name:    "health-check-interval",
-				Value:   0,
-				Usage:   "interval for agent to check container's health status",
-				EnvVars: []string{"ERU_AGENT_HEALTH_CHECK_INTERVAL"},
-			},
-			&cli.IntFlag{
-				Name:    "health-check-timeout",
-				Value:   0,
-				Usage:   "timeout for agent to check container's health status",
-				EnvVars: []string{"ERU_AGENT_HEALTH_CHECK_TIMEOUT"},
-			},
-			&cli.StringFlag{
-				Name:    "hostname",
-				Value:   "",
-				Usage:   "change hostname",
-				EnvVars: []string{"ERU_HOSTNAME"},
-			},
-		},
-		Action: serve,
+		Flags:   getFlags(),
+		Action:  serve,
 	}
 	app.Run(os.Args)
 }
