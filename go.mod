@@ -33,6 +33,7 @@ require (
 	go.uber.org/automaxprocs v1.2.0
 	go.uber.org/zap v1.9.1 // indirect
 	golang.org/x/net v0.0.0-20191003171128-d98b1b443823
+	golang.org/x/time v0.0.0-20191024005414-555d28b269f0
 )
 
 replace github.com/libgit2/git2go v0.0.0-20190813182810-37e5b53f742d => github.com/CMGS/git2go v0.0.0-20190930074211-b81086e21275

@@ -3,7 +3,6 @@ package logs
 import (
 	"errors"
 	"math/rand"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,13 +12,14 @@ import (
 	"github.com/projecteru2/agent/utils"
 )
 
-// Poll manages and holds a pool of transporters
+// Pool manages and holds a pool of transporters
 type Pool struct {
 	backends   []*utils.Backend
 	workers    *ants.PoolWithFunc
-	transports *sync.Pool
+	transports *utils.ObjectPool
 	closed     bool
-	droped     int32
+	failed     uint64
+	sent       uint64
 }
 
 func trasporterFactory(p *Pool) func() interface{} {
@@ -38,6 +38,10 @@ func trasporterFactory(p *Pool) func() interface{} {
 			t, err = transport.NewUDP(b)
 		case utils.Journal:
 			t, err = transport.NewJournal()
+		case utils.Console:
+			t = transport.NewConsole()
+		case utils.Log:
+			t = transport.NewLog()
 		default:
 			return nil
 		}
@@ -51,10 +55,11 @@ func trasporterFactory(p *Pool) func() interface{} {
 func workerFactory(p *Pool) func(interface{}) {
 	return func(arg interface{}) {
 		logs := arg.([]*types.Log)
+		defer ReturnLogsBuffer(logs)
 		t := p.fetchOrCreateTrans()
 		if t == nil {
 			// drop data
-			atomic.AddInt32(&p.droped, int32(len(logs)))
+			p.increseFailed(len(logs))
 			return
 		}
 		if !t.Send(logs) {
@@ -74,14 +79,18 @@ func NewPool(backends []*utils.Backend, maxConcurrency int) (p *Pool, err error)
 	if maxConcurrency < 1 {
 		return nil, errors.New("Wrong maxConcurrency for pool")
 	}
-	// seed once
+	// seed once, before transporters are created
 	rand.Seed(time.Now().UnixNano())
 	p = &Pool{
 		backends: backends,
 	}
-	p.transports = &sync.Pool{
-		New: trasporterFactory(p),
-	}
+	// init object pool for connections
+	p.transports = utils.NewObjectPool(maxConcurrency, trasporterFactory(p), func(obj interface{}) {
+		if t, ok := obj.(Transporter); ok {
+			t.Close()
+		}
+	})
+	// init workers
 	workerPool, err := ants.NewPoolWithFunc(maxConcurrency, workerFactory(p))
 	if err != nil {
 		return nil, err
@@ -110,15 +119,34 @@ func (p *Pool) fetchOrCreateTrans() Transporter {
 	}
 }
 
-// Droped return the count of droped logs
-func (p *Pool) Droped() int32 {
-	return p.droped
+// Failed return the count of failed logs
+func (p *Pool) Failed() uint64 {
+	return p.failed
 }
 
-// ResetDroped reset the droped statistics and return the old value
-func (p *Pool) ResetDroped() int32 {
-	val := atomic.SwapInt32(&p.droped, 0)
+// ResetFailed reset the failed statistics and return the old value
+func (p *Pool) ResetFailed() uint64 {
+	val := atomic.SwapUint64(&p.failed, 0)
 	return val
+}
+
+func (p *Pool) increseFailed(cnt int) {
+	atomic.AddUint64(&p.failed, uint64(cnt))
+}
+
+// Sent return the count of sent logs
+func (p *Pool) Sent() uint64 {
+	return p.sent
+}
+
+// ResetSent reset the sent statistics and return the old value
+func (p *Pool) ResetSent() uint64 {
+	val := atomic.SwapUint64(&p.sent, 0)
+	return val
+}
+
+func (p *Pool) increseSent(cnt int) {
+	atomic.AddUint64(&p.sent, uint64(cnt))
 }
 
 // pickServer picks a server to connect
@@ -129,9 +157,15 @@ func (p *Pool) pickServer() *utils.Backend {
 // Send sends logs out and block if all workers is full
 func (p *Pool) Send(logs []*types.Log) bool {
 	if p.closed {
+		p.increseFailed(len(logs))
+		ReturnLogsBuffer(logs)
 		return false
 	}
-	p.workers.Invoke(logs)
+	if p.workers.Invoke(logs) != nil {
+		p.increseFailed(len(logs))
+		return false
+	}
+	p.increseSent(len(logs))
 	return true
 }
 

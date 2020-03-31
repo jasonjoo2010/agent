@@ -11,10 +11,13 @@ import (
 type Type int
 
 const (
-	TCP       Type = 1
-	UDP       Type = 2
-	Journal   Type = 3
-	BlackHole Type = 4
+	_ Type = iota
+	TCP
+	UDP
+	Journal
+	BlackHole
+	Console
+	Log
 )
 
 var (
@@ -69,6 +72,13 @@ func ParseBackend(backend string) (*Backend, error) {
 		return NewBackend(t, "", 0), nil
 	case "journal":
 		t = Journal
+		return NewBackend(t, "", 0), nil
+	case "console":
+		t = Console
+		return NewBackend(t, "", 0), nil
+	case "log":
+		t = Log
+		return NewBackend(t, "", 0), nil
 	default:
 		return nil, IllegalType
 	}
