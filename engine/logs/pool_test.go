@@ -74,9 +74,9 @@ func TestPool(t *testing.T) {
 		})
 	}
 
-	for i := 0; i < 10-int(p.Dropped()); i++ {
+	for i := 0; i < 10-int(p.Failed()); i++ {
 	INNER_LOOP:
-		for i < 10-int(p.Dropped()) {
+		for i < 10-int(p.Failed()) {
 			select {
 			case name := <-ch:
 				assert.Contains(t, name, "test")
@@ -85,8 +85,8 @@ func TestPool(t *testing.T) {
 			}
 		}
 	}
-	if p.Dropped() > 0 {
-		fmt.Println(p.Dropped(), "packet(s) dropped")
+	if p.Failed() > 0 {
+		fmt.Println(p.Failed(), "packet(s) failed")
 	}
 
 	p.Close()

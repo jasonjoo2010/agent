@@ -27,8 +27,11 @@ type APIConfig struct {
 
 // LogConfig contain log config
 type LogConfig struct {
-	Forwards []string `yaml:"forwards"`
-	Stdout   bool     `yaml:"stdout"`
+	Forwards    []string `yaml:"forwards"`
+	Stdout      bool     `yaml:"stdout"` // deprecated
+	Connections int      `yaml:"connections" default:"10"`
+	Ratelimit   int      `yaml:"ratelimit" default:"-1"`
+	BufferSize  int      `yaml:"buffer_size" default:"5000"`
 }
 
 // Config contain all configs
@@ -70,14 +73,14 @@ func setBool(attr *bool, c *cli.Context, key string) {
 
 func setInt(attr *int, c *cli.Context, key string) {
 	val := c.Int(key)
-	if val > 0 {
+	if val != 0 {
 		*attr = val
 	}
 }
 
 func setInt64(attr *int64, c *cli.Context, key string) {
 	val := c.Int64(key)
-	if val > 0 {
+	if val != 0 {
 		*attr = val
 	}
 }
@@ -96,7 +99,10 @@ func (config *Config) PrepareConfig(c *cli.Context) {
 	setStringSlice(&config.Metrics.Transfers, c, "metrics-transfers")
 	setString(&config.API.Addr, c, "api-addr")
 	setStringSlice(&config.Log.Forwards, c, "log-forwards")
-	setBool(&config.Log.Stdout, c, "log-stdout")
+	//setBool(&config.Log.Stdout, c, "log-stdout")
+	setInt(&config.Log.Connections, c, "log-forwards-connections")
+	setInt(&config.Log.BufferSize, c, "log-forwards-buffer-size")
+	setInt(&config.Log.Ratelimit, c, "log-forwards-ratelimit")
 
 	//validate
 	if config.HostName == "" {

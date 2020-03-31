@@ -67,11 +67,11 @@ func TestConfigStrings(t *testing.T) {
 		"--hostname",
 		"demo-machine",
 		"--log-forwards",
-		"192.168.0.1:444",
+		"tcp://192.168.0.1:444",
 		"--log-forwards",
-		"192.168.0.2:444",
+		"udp://192.168.0.2:444",
 		"--log-forwards",
-		"192.168.0.3:444",
+		"journal://192.168.0.3:444",
 	})
 }
 

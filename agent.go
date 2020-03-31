@@ -125,11 +125,29 @@ func getFlags() []cli.Flag {
 			Usage:   "log destinations",
 			EnvVars: []string{"ERU_AGENT_LOG_FORWARDS"},
 		},
-		&cli.StringFlag{
+		&cli.StringFlag{ // deprecated
 			Name:    "log-stdout",
 			Value:   "",
 			Usage:   "forward stdout out? yes/no",
 			EnvVars: []string{"ERU_AGENT_LOG_STDOUT"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-connections",
+			Value:   0,
+			Usage:   "how many connections will be made to transfer logs parallelly",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_CONNECTIONS"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-buffer-size",
+			Value:   0,
+			Usage:   "how many logs can be buffered before transferred",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_BUFFER_SIZE"},
+		},
+		&cli.IntFlag{
+			Name:    "log-forwards-ratelimit",
+			Value:   0,
+			Usage:   "whether it should be limited at a rate",
+			EnvVars: []string{"ERU_AGENT_FORWARDS_RATELIMIT"},
 		},
 		&cli.StringFlag{
 			Name:    "pidfile",

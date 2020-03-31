@@ -8,6 +8,7 @@ import (
 
 	engineapi "github.com/docker/docker/client"
 	"github.com/projecteru2/agent/common"
+	"github.com/projecteru2/agent/engine/logs"
 	"github.com/projecteru2/agent/store"
 	corestore "github.com/projecteru2/agent/store/core"
 	"github.com/projecteru2/agent/types"
@@ -29,7 +30,7 @@ type Engine struct {
 	memory  int64
 
 	transfers *utils.HashBackends
-	forwards  *utils.HashBackends
+	writer    *logs.Writer
 
 	dockerized bool
 }
@@ -74,7 +75,21 @@ func NewEngine(config *types.Config) (*Engine, error) {
 	engine.cpuCore = float64(len(cpus))
 	engine.memory = int64(memory.Total)
 	engine.transfers = utils.NewHashBackends(config.Metrics.Transfers)
-	engine.forwards = utils.NewHashBackends(config.Log.Forwards)
+
+	// init log writer
+	if len(config.Log.Forwards) > 0 {
+		backends, err := utils.ParseBackends(config.Log.Forwards)
+		if err != nil {
+			return nil, err
+		}
+		engine.writer, err = logs.NewWriter(backends, 10, 10000, 10000)
+	} else {
+		engine.writer, err = logs.NewWriter([]*utils.Backend{}, 1, 10000, -1)
+	}
+	if err != nil {
+		return nil, err
+	}
+
 	return engine, nil
 }
 
